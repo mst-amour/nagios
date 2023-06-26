@@ -79,30 +79,43 @@ printout()
 sub exec(strCmd)
 	'Declare variables
 	dim objShell : Set objShell = WScript.CreateObject("WScript.Shell")
-	dim oExec1 : Set oExec1=objShell.Exec("cmd /c chcp")
-	dim conv : Set conv=CreateObject("OlePrn.OleCvt")
-	dim objExecObject, lineout, tmpline, mess, ssaccent
-	dim page_code
+	dim objExecObject, lineout, tmpline, tmpline_no_cr_lf, end_passed_str, tmpline_next
 	lineout = ""
 	'Command line options we're using
-	pt strCmd 
-    mess=oExec1.StdOut.ReadAll
-	page_code = Split(mess,":",-1,1)
+	' pt strCmd
+	
 	Set objExecObject = objShell.Exec(strCmd)
+
 	'Loop until end of output from dcdiag
 	do While not objExecObject.StdOut.AtEndOfStream
-        ssaccent = conv.ToUnicode(objExecObject.StdOut.ReadLine(),trim(page_code(1)))
-		tmpline = lcase(ssaccent)
-		'Check the version of DCDiag being used and change the global 'passed' / 'failed' strings
-		call parselang(tmpline)
+		tmpline = lcase(objExecObject.StdOut.ReadLine())
+		
+		tmpline_no_cr_lf = Replace(tmpline,chr(10),"") ' Newline
+		tmpline_no_cr_lf = Replace(tmpline,chr(13),"") ' CR
+		
+		call parselang(tmpline_no_cr_lf)
 		lineout = lineout + tmpline
-		if (instr(tmpline, ".....")) then 
+		if (instr(tmpline_no_cr_lf, ".....")) then 
 			'testresults start with a couple of dots, so lets reset the lineout buffer
 			lineout= tmpline
+
+			if (len(tmpline_no_cr_lf) > 13) then
+				end_passed_str = Mid(tmpline_no_cr_lf, Len(tmpline_no_cr_lf) - 10, 11)
+				
+				if(StrComp(end_passed_str, "passed test") = 0) then
+					tmpline_next = lcase(objExecObject.StdOut.ReadLine())
+					tmpline_next = Replace(tmpline_next,chr(10),"") ' Newline
+					tmpline_next = Replace(tmpline_next,chr(13),"") ' CR
+					
+					tmpline_no_cr_lf = tmpline_no_cr_lf + tmpline_next
+				end if
+				
+			end if
 		end if
-		if instr(lineout, lcase(strOK)) then
+		
+		if instr(tmpline_no_cr_lf, lcase(strOK)) then
 			'we have a strOK String which means we have reached the end of a result output (maybe on newline)
-			call parse(lineout)
+			call parse(tmpline_no_cr_lf)
 			lineout = ""
 		end if 
 	loop
